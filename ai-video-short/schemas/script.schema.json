@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mromidev/claude-animated-shorts/ai-video-short/schemas/script.schema.json",
+  "title": "script.json",
+  "description": "Parsed narration script: the prosodic segments, their emotion, and the storyboard intent for each. Produced by S0 from script-tagged.txt. The source text is never edited here.",
+  "type": "object",
+  "required": ["title", "source", "defaults", "segments"],
+  "additionalProperties": false,
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "required": ["file", "sha256", "language"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string" },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "language": { "type": "string", "examples": ["bn", "hi", "en"] },
+        "spokenSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "required": ["voiceId", "modelId", "outputFormat", "emotionStrategy"],
+      "additionalProperties": false,
+      "properties": {
+        "voiceId": { "type": "string" },
+        "modelId": {
+          "enum": ["eleven_v3", "eleven_v4", "eleven_multilingual_v2", "eleven_turbo_v2_5"]
+        },
+        "outputFormat": { "type": "string", "default": "mp3_44100_128" },
+        "emotionStrategy": {
+          "enum": ["prosody-map", "inline-tags"],
+          "description": "prosody-map = strip tags, map to voiceSettings. inline-tags = keep [tags] in the text (eleven_v3)."
+        },
+        "languageCode": { "type": "string", "default": "bn" }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "index", "text", "emotion", "beat", "cast", "location", "motionClass"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^SEG[0-9]{2,3}$" },
+          "index": { "type": "integer", "minimum": 1 },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Spoken text for this segment. No bracketed tags when emotionStrategy=prosody-map."
+          },
+          "emotion": {
+            "enum": ["thoughtful", "excited", "serious", "sad", "neutral", "short pause"]
+          },
+          "protected": {
+            "type": "boolean",
+            "default": false,
+            "description": "Never split this segment across shots (hook, punchline, final line)."
+          },
+          "pauseAfterSec": { "type": "number", "minimum": 0, "maximum": 3 },
+          "beat": { "type": "string", "minLength": 3 },
+          "cast": {
+            "type": "array",
+            "maxItems": 3,
+            "items": { "type": "string" },
+            "description": "Keys from style-lock.json characters, e.g. GARUDA."
+          },
+          "location": {
+            "type": "string",
+            "description": "Key from style-lock.json locations, e.g. forest-clearing."
+          },
+          "motionClass": {
+            "enum": ["creep", "orbit", "parallax", "impact", "sway"]
+          },
+          "forceCutAfter": {
+            "type": "boolean",
+            "default": false,
+            "description": "Mandatory shot boundary after this segment (impact insert)."
+          },
+          "voiceSettings": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "stability": { "type": "number", "minimum": 0, "maximum": 1 },
+              "similarityBoost": { "type": "number", "minimum": 0, "maximum": 1 },
+              "style": { "type": "number", "minimum": 0, "maximum": 1 },
+              "useSpeakerBoost": { "type": "boolean" },
+              "speed": { "type": "number", "minimum": 0.7, "maximum": 1.2 }
+            }
+          }
+        }
+      }
+    }
+  }
+}

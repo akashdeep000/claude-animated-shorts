@@ -1,0 +1,27 @@
+# build output
+node_modules/
+out/
+dist/
+
+# generated media and run artifacts (the pipeline writes these per project)
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.m4a
+keyframes/
+clips/
+state/
+qa/
+
+# secrets and local config
+.env
+.env.*
+.vibes-session.json
+cookies*.json
+*.pem
+
+# editor / OS
+.DS_Store
+*.log

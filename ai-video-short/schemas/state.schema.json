@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mromidev/claude-animated-shorts/ai-video-short/schemas/state.schema.json",
+  "title": "state/<stage>.json",
+  "description": "Resumability record. One file per stage. An unchanged inputHash with status=done makes the stage a no-op.",
+  "type": "object",
+  "required": ["stage", "inputHash", "status", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "stage": {
+      "enum": ["s0_script", "s1_tts", "s2_timeline", "s3_shots", "s4_prompts", "s5_keyframes", "s6_clips", "s7_assembly"]
+    },
+    "inputHash": { "type": "string", "pattern": "^sha256:" },
+    "status": { "enum": ["pending", "partial", "done", "failed"] },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": ["string", "null"], "format": "date-time" },
+    "attempts": { "type": "integer", "minimum": 0 },
+    "items": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["status", "attempts"],
+        "additionalProperties": false,
+        "properties": {
+          "status": { "enum": ["pending", "running", "done", "failed", "skipped"] },
+          "attempts": { "type": "integer", "minimum": 0 },
+          "error": { "type": "string" },
+          "artifact": { "type": "string" },
+          "notes": { "type": "string" },
+          "metrics": {
+            "type": "object",
+            "additionalProperties": { "type": ["number", "string", "boolean"] }
+          }
+        }
+      }
+    },
+    "artifacts": { "type": "array", "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  }
+}

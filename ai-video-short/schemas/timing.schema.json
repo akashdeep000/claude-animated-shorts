@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mromidev/claude-animated-shorts/ai-video-short/schemas/timing.schema.json",
+  "title": "timing.json",
+  "description": "Master clock. Per-segment word timestamps plus the flat global word list that every downstream stage reads. All times in seconds from the first sample of narration.wav.",
+  "type": "object",
+  "required": ["audio", "durationSec", "sampleRate", "segments", "words"],
+  "additionalProperties": false,
+  "properties": {
+    "audio": { "type": "string" },
+    "durationSec": { "type": "number", "exclusiveMinimum": 0 },
+    "sampleRate": { "type": "integer", "default": 48000 },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string" },
+        "endpoint": { "type": "string", "default": "/v1/speech" },
+        "voiceId": { "type": "string" },
+        "voiceName": { "type": "string" },
+        "modelId": { "type": "string" },
+        "emotionStrategy": { "type": "string" }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "startSec", "endSec", "words"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "startSec": { "type": "number", "minimum": 0 },
+          "endSec": { "type": "number", "minimum": 0 },
+          "audioFile": { "type": "string" },
+          "cached": { "type": "boolean" },
+          "words": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["text", "start", "end", "clauseEnd", "sentenceEnd"],
+              "additionalProperties": false,
+              "properties": {
+                "text": { "type": "string", "minLength": 1 },
+                "start": { "type": "number", "minimum": 0 },
+                "end": { "type": "number", "minimum": 0 },
+                "clauseEnd": { "type": "boolean" },
+                "sentenceEnd": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "pauses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["afterSegment", "startSec", "durSec"],
+        "additionalProperties": false,
+        "properties": {
+          "afterSegment": { "type": "string" },
+          "startSec": { "type": "number", "minimum": 0 },
+          "durSec": { "type": "number", "minimum": 0 }
+        }
+      }
+    },
+    "words": {
+      "type": "array",
+      "description": "Flattened, global, monotonic. The only clock S3 and S7 may read.",
+      "items": {
+        "type": "object",
+        "required": ["text", "start", "end", "segmentId", "clauseEnd", "sentenceEnd"],
+        "additionalProperties": false,
+        "properties": {
+          "text": { "type": "string" },
+          "start": { "type": "number", "minimum": 0 },
+          "end": { "type": "number", "minimum": 0 },
+          "segmentId": { "type": "string" },
+          "clauseEnd": { "type": "boolean" },
+          "sentenceEnd": { "type": "boolean" },
+          "frameStart": { "type": "integer", "minimum": 0 },
+          "frameEnd": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

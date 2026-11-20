@@ -223,11 +223,11 @@ The first run's "4 max" was the upper bound, not the optimum.
    for a beat; both are used (the tag for performance, the inserted silence for
    the clock).
 4. **Music and SFX.** Generated programmatically. Music: local raga engine
-   (numpy, deterministic, frame-accurate). SFX: local synth by default, with an
-   optional pass through the ElevenLabs anonymous sound-generation endpoint for
-   the two hero cues (conch, temple bell) — it works without a token but the
-   preview allows only **two requests of four takes**, so it can never be a
-   dependency. Both paths, with the measured limits, are in `AUDIO.md`.
+   (numpy, deterministic, frame-accurate), optionally over a frozen tanpura
+   loop. SFX: local synth by default, plus the hero takes already frozen from
+   the ElevenLabs preview (conch, temple bell, whoosh) — that endpoint works
+   without a token but blocks intermittently, so it can never be a dependency.
+   Both paths, with the measured limits, are in `AUDIO.md`.
 5. **Captions.** Off.
 6. **Reuse.** Clean start at `~/Videos/garuda-jatayu-v2`. The old folder stays
    untouched as a comparison.

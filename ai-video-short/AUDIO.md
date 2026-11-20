@@ -10,7 +10,7 @@ Everything below was measured on this machine on 2026-11-20.
 
 | lane | auth | limit | verdict |
 |---|---|---|---|
-| `POST https://api.elevenlabs.io/sound-generation` (web preview) | none | **quota_exceeded after 2 requests**, 4 takes each | good for 2 hero cues x 4 takes |
+| `POST https://api.elevenlabs.io/sound-generation` (web preview) | none | **intermittent `quota_exceeded`** — blocks for minutes after a burst, recovers on its own | hero cues and one drone bed; never a dependency |
 | `POST https://api.elevenlabs.io/v1/sound-generation` (public API) | `xi-api-key` | plan-dependent | needs auth; not used |
 | `/v1/sound-generation/anonymous` | — | 404, no such route | does not exist |
 | ElevenLabs Music API | `xi-api-key` | plan-dependent | not reachable anonymously; not used |
@@ -31,6 +31,21 @@ Measured SFX response, 3.0 s request, ~3.8 s latency:
 The field is named `waveform_base_64` but it is the **audio**: base64 Ogg/Opus,
 48 kHz stereo, exact requested duration, 4 takes per call. Decode, `ffprobe`,
 pick a take. That is a real generator, just a narrow one.
+
+Measured behaviour over 30 minutes of probing (2026-11-20):
+
+- `loop: true` works, and durations up to **30 s** are accepted;
+- latency 3-23 s depending on duration; a 30 s request took 23 s;
+- the 401 is **intermittent**, not a hard ceiling: two bursts (13:06, 13:07)
+  were rejected, then four consecutive requests succeeded at 13:23-13:24 on
+  the same IP. It blocks for minutes and recovers by itself;
+- six requests in ~20 min produced 24 usable takes, all cached;
+- the four takes of one prompt are **not pitch-consistent**: the tanpura set
+  came out at 128.6, 103.8, 95.9 and 73.4 Hz. Pick one take per cue, never
+  crossfade takes blindly.
+
+Because it blocks without warning, the design still treats it as an optional
+quality pass. The run must complete with the local synth alone.
 
 Audio tags inside the TTS (verified with `eleven_v4` + Bengali):
 
@@ -98,9 +113,14 @@ authentic performance. Keep them sparse and low; the narration owns the mids.
 
 ### Generation method
 
-1. **Tanpura drone.** Sa + Pa, five plucked strings 0.7-1.1 s apart, slight
-   detune, 0.4 Hz amplitude breathing. Always on, -30 dBFS. One continuous
-   render, never a looped file (loops seam).
+1. **Tanpura drone.** Two sources, same contract: either synthesize Sa + Pa
+   with five plucked strings 0.7-1.1 s apart, slight detune and 0.4 Hz
+   amplitude breathing, or use the frozen 10 s tanpura take (take 0,
+   Sa = 128.6 Hz). Always on, -30 dBFS. The frozen take loops
+   cleanly (seam jump 0.0145 vs p99 sample delta 0.0655, measured); if it is
+   used, **every motif must be tuned to Sa = 128.6 Hz**, not to equal
+   temperament's C3. A synthesized drone is one continuous render, not a
+   looped file.
 2. **Motif bank.** 3-5 motifs per raga of 3-7 notes drawn from its
    aroha/avaroha with a declared landing note. Sequenced by a grammar:
    statement, answer a fourth up, rest, variation, cadence.
@@ -118,37 +138,45 @@ Instruments to add to `templates/audio/instruments.py`: `bansuri`, `sarangi`,
 `damaru`, `conch`, `bell_temple`, `tanpura`. The existing `pluck`, `pad`,
 `vibes`, `timpani`, `cymbal` already cover sitar, drone, swarmandal, war drum.
 
-## SFX: local first, ElevenLabs for the two sounds that matter most
+## SFX: local first, ElevenLabs for what is already frozen
 
 Every cue in the sheet has a local synth recipe, so the film never blocks on a
-quota. The measured preview quota is **two requests of four takes each**, so it
-buys exactly two cues. Spend it on the two sounds the audience will notice:
+quota. The preview lane is intermittent, so the rule is: **use what is already
+cached, request nothing during a production run.**
 
-1. Request `conch` (shankha) and `temple bell` — four takes each, cache by
-   prompt hash.
-2. Pick one take per cue by ear, freeze it into `sfx/hero/<cue>.opus` + `.json`.
-3. Every other cue, and every re-render, uses the local synth — or the frozen
-   hero take if one exists.
+Frozen from the probe session into `<project>/sfx/hero/` (24 takes were
+generated; the chosen four are assets now):
 
-If the quota is already spent (it resets on its own schedule, not on demand),
-skip step 1 entirely. The run is never blocked, and the film never sounds
-unfinished because of it.
+| cue | status |
+|---|---|
+| `conch` | 4 takes, 3.0 s each — freeze take 0 |
+| `bell_temple` | 4 takes, 3.0 s each — freeze take 0 |
+| `whoosh_flash` | 8 takes, 1.2 s each — freeze the best two |
+| `tanpura` (drone) | 4 takes, 10 s, loopable — take 0 at Sa = 128.6 Hz |
+| `raga_bed` | 4 takes, 30 s, melodic — optional section bed |
+
+Freezing means copying the chosen take to `sfx/hero/<cue>.opus` with a `.json`
+holding the prompt, settings and measured pitch. After that the file is an
+asset, not a live dependency.
+
+If a future run needs a new hero sound, it is a separate one-off session, never
+part of the pipeline. A 401 is expected and is not an error worth retrying.
 
 | cue | local recipe | hero candidate |
 |---|---|---|
-| `conch` (shankha) | filtered saw + formant + breath swell | yes — first request |
-| `bell_temple` | 5-partial modal bank, 6 s decay | yes — second request |
-| `wingbeat` | noise whoosh, 3 pulses 90 ms apart | next window |
-| `chariot` | 40 Hz rumble + wheel ticks + air | next window |
-| `clash` | metal modal + 2 ms transient | no |
-| `thunder` | brown noise + sub boom + tail | no |
-| `fire` | crackle train + low roar | no |
-| `whoosh_flash` | reverse swell + low whoomp | no |
-| `feather_fall` | noise tick + soft thump | no |
-| `crowd` | 12-24 formant voices (`vox()` exists) | no |
-| `ocean` | filtered noise bed + slow swell | no |
-| `wind` | band-passed noise, slow LFO | no |
-| `heartbeat` | 2 low sine pulses, 0.9 s apart | no |
+| `conch` (shankha) | filtered saw + formant + breath swell | frozen |
+| `bell_temple` | 5-partial modal bank, 6 s decay | frozen |
+| `wingbeat` | noise whoosh, 3 pulses 90 ms apart | local |
+| `chariot` | 40 Hz rumble + wheel ticks + air | local |
+| `clash` | metal modal + 2 ms transient | local |
+| `thunder` | brown noise + sub boom + tail | local |
+| `fire` | crackle train + low roar | local |
+| `whoosh_flash` | reverse swell + low whoomp | frozen |
+| `feather_fall` | noise tick + soft thump | local |
+| `crowd` | 12-24 formant voices (`vox()` exists) | local |
+| `ocean` | filtered noise bed + slow swell | local |
+| `wind` | band-passed noise, slow LFO | local |
+| `heartbeat` | 2 low sine pulses, 0.9 s apart | local |
 
 ### Placement rules
 

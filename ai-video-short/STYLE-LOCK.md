@@ -4,6 +4,10 @@ One look, one sheet, no per-shot additions. Everything here is a constant in
 `style-lock.json`; prompts are assembled from it and the lint rejects a prompt
 that paraphrases it (paraphrase is how looks drift).
 
+Measured bar: `../references/mythic/` — the start frame and the working clip
+(720x1280, 24 fps, 125 frames, YAVG 107.9, SATAVG 25.7, HUEAVG 136.6). The
+numbers below are targets against that bar, not adjectives.
+
 ## The style block (verbatim)
 
 ```

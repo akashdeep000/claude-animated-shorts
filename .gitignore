@@ -10,6 +10,9 @@ dist/
 *.wav
 *.mp3
 *.m4a
+# ...except the style bar, which is committed evidence
+!references/mythic/*.mp4
+!references/mythic/*.mp3
 keyframes/
 clips/
 state/

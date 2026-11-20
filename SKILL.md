@@ -5,6 +5,10 @@ description: Make a ~55-70 s vertical cartoon story short in the "2D characters 
 
 # Cartoon 3D story short (three.js + Remotion)
 
+> Scope: this skill is the **three.js format**. For the narrated AI-video
+> format (TTS → Gemini keyframes → vibes.ai → ffmpeg), use
+> `ai-video-short/SKILL.md`. The two share the standard, not the renderer.
+
 Proven example: **The Bridge That Fell for a Song**. It is an original 67 s short about the 1831 Broughton bridge and 74 soldiers marching in step.
 - Code: `src/videos/bridge/` of your Remotion project (composition `BridgeShort`, 1080x1920, 30 fps).
 - Script, voice and sound: `~/bridge-short/`.

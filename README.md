@@ -43,6 +43,28 @@ skill, the twelve defects in the first ad-hoc run (stretched clips, keyframe
 prompts reused as video prompts, no resume, no reference conditioning), and the
 eight gates that prevent them.
 
+## The mythic style bar
+
+The new format has its own look, and its own evidence:
+
+- `references/mythic/part1-startframe.jpg` — the keyframe that set the bar
+  (720x1280).
+- `references/mythic/ramayana-part1-v1.mp4` — a working clip: 720x1280, 24 fps,
+  125 frames, 5.208 s, YAVG 107.9 / SATAVG 25.7 / HUEAVG 136.6.
+- `references/mythic/p1-prompt.txt` and `p2-prompt-v3.txt` — the passing prompt
+  shape, including the pose-lock sentence.
+- `ai-video-short/STYLE-LOCK.md` — the locked style block, the 13-character
+  sheet and the palette targets. One source of truth; the reference folder is
+  evidence, not a second copy.
+
+The two generic helpers from that run are in `templates/mythic/`:
+`ramayana-gen.mts` (one shot end to end) and `kinetic.sh` (camera/god-ray life
+pass for static clips).
+
+`references/` (the top-level folder) remains the private study material for the
+three.js format. `references/mythic/` is our own generated work and can be
+published; keep the two separate.
+
 Status: **plan + contracts.** Stage CLIs are specified in
 `ai-video-short/tools/CONTRACTS.md`; no pipeline code has been written yet.
 
@@ -62,9 +84,11 @@ Status: **plan + contracts.** Stage CLIs are specified in
 | `ai-video-short/tools/CONTRACTS.md` | the thirteen CLIs, their I/O and exit codes |
 | `ai-video-short/missions/garuda-jatayu.md` | the pilot script, cast, visual rules and acceptance criteria |
 | `templates/bridge/` | the full source of the bridge short: world, characters, ink, lens blur, grade, story/camera |
+| `templates/mythic/` | one-shot vibes generator + kinetic life pass from the mythic run |
 | `templates/audio/` | the synthesized sound: SFX, march music, the mix with ducking and loudness |
 | `templates/scripts/` | Stills, side-by-side sheets, shot merge and frame-by-frame QA helpers |
 | `references/STYLE_BIBLE.md` | The script and visual formula measured from 20 reference shorts |
+| `references/mythic/` | our own mythic style bar: start frame, working clip, passing prompts, measured palette |
 | `references/reports/` | Seven measured reports: motion, depth, textures, characters, lighting, outlines, grade |
 | `references/frames/` | 38 full-size reference frames (540x960) to compare your frames against |
 | `references/sheets/` | 20 contact sheets, one per reference short, 60 frames each (1,200 frames) |

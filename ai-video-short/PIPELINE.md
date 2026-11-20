@@ -262,6 +262,16 @@ policyHits, mediaEntId, accepted, drift, motion}`.
 
 Library: `/home/akash/code/vibes-ai-unofficial-api` (do not refactor). Node 22+.
 
+Auth is one session on one account:
+
+- `new VibesClient({ session: autoSession() })` is the normal path; the cached
+  `~/.vibes-session.json` is reused.
+- If you pass a raw cookie instead, it **must** be
+  `VIBES_SESSION_COOKIE='meta_session=<value>'`. A bare token returns
+  `401 NoToken`, which looks like an auth failure but is a formatting one.
+- One-shot command: `templates/mythic/ramayana-gen.mts` (upload, submit, wait,
+  download, provenance). The orchestrated version is `clips.py`.
+
 ```ts
 const client = new VibesClient({ session: autoSession() });
 const project = await client.projects.create(`GJ-${shotId}`);

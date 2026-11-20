@@ -22,6 +22,9 @@ Detail lives in:
 - `PROMPTS.md` — prompt algebra, motion classes, moderation ladder
 - `AUDIO.md` — generated raga score + synthesized SFX, levels, ducking
 - `QA.md` — gate checks, thresholds, defect taxonomy
+- `../references/mythic/` — the measured style bar: start frame, working clip,
+  passing prompts, palette numbers
+- `../templates/mythic/` — one-shot vibes generator and the kinetic life pass
 - `tools/CONTRACTS.md` — the thirteen CLIs this workflow assumes
 - `missions/garuda-jatayu.md` — the pilot: verbatim script, cast, visual rules,
   acceptance criteria

@@ -56,16 +56,16 @@ Request:
 
 ```json
 {
-  "text": "<spoken segment>",
+  "text": "[thoughtful] <spoken segment>",
   "languageCode": "bn",
-  "voiceId": "713Bv3p3NNV0DJn7YgBo",
+  "voiceId": "3AMU7jXQuQa3oRvRqUmb",
   "modelId": "eleven_v4",
   "outputFormat": "mp3_44100_128",
   "words": true,
   "stitchContext": false,
   "voiceSettings": {
-    "stability": 0.62, "similarityBoost": 0.78,
-    "style": 0.18, "useSpeakerBoost": true, "speed": 0.96
+    "stability": 0.55, "similarityBoost": 0.78,
+    "style": 0.35, "useSpeakerBoost": true, "speed": 1.0
   }
 }
 ```
@@ -92,25 +92,50 @@ Rules:
 - Retry a 5xx with backoff; never retry a 4xx unchanged.
 - Cache key is the whole request; identical text + settings is ~10 ms.
 
-**Emotion strategy.** Two candidates, decided by a bake-off (`qa/tts-bakeoff.md`):
+**Emotion strategy: `eleven_v4` + inline audio tags.** Decided; there is no
+bake-off. Tags stay in the request `text` and the model performs them.
 
-| strategy | how | status |
+| script tag | sent as | effect |
 |---|---|---|
-| A: v4 + prosody map (default) | tag -> `{stability, style, speed}` per segment | proven in v1 |
-| B: v3 + inline tags | keep `[thoughtful]`, `[serious]` in the text; v3 speaks audio tags | expressive, Bengali untested |
+| `[thoughtful]` | `[thoughtful]` | slower, level, a beat of lead-in |
+| `[excited]` | `[excited]` | brighter, faster |
+| `[serious]` | `[low, grave]` | firm and low (`[serious]` is not a valid tag) |
+| `[sad]` | `[sad]` | soft, slower |
+| `[short pause]` | `[pause]` | a breath from the model **and** 0.9 s of silence in S2 |
+| `[neutral]` | — | no tag |
 
-Mapping for strategy A:
+Measured on this machine: `[thoughtful] হ্যাঁ।` = 1.31 s vs `হ্যাঁ।` = 0.84 s;
+a tag is direction, not speech (tag-only text returns HTTP 422);
+`[thunder rumbling] হ্যাঁ।` inserts ~1.35 s of real sound. So a tag can carry
+one diegetic event, but it lands inside the narration file where it cannot be
+ducked or panned. Use tags for performance, not for the sound design.
 
-| tag | stability | style | speed | reading |
-|---|---|---|---|---|
-| thoughtful | 0.66 | 0.12 | 0.94 | slower, level |
-| excited | 0.45 | 0.42 | 1.06 | brighter, faster |
-| serious | 0.72 | 0.20 | 0.96 | firm, low |
-| sad | 0.68 | 0.16 | 0.92 | soft, slower |
-| short pause | — | — | — | no segment; pause in S2 |
-| neutral | 0.62 | 0.18 | 1.00 | default |
+Rules:
+
+- At most one tag per segment, at the segment start. Mid-sentence tags shift
+  the alignment in ways the word list does not describe.
+- Diegetic tags only where the sound must come from the voice take itself.
+- Never `[...]` around ordinary words; the model may read them.
+
+**Alignment hygiene.** The service's `words[]` includes the tag token (for
+example `[thoughtful]`) as a word with a short span. Before S2:
+
+```python
+TAG = re.compile(r"^\[[^\]]+\]$")
+words = [w for w in words if not TAG.match(w.text)]
+```
+
+Drop the tag's silent span from the segment's first word start, and assert the
+concatenated character spans still cover the spoken text.
 
 **Output** `tts/SEG01.mp3`, `tts/SEG01.words.json`, `tts/SEG01.request.json`.
+
+Under the hood: elevellab posts each chunk to the anonymous
+`/v1/text-to-speech/{voice}/stream/with-timestamps/anonymous` endpoint with a
+single-use hCaptcha ticket. The upstream model default is `eleven_v3`, the
+chunk ceiling is 1000 characters, and chunks are synthesised standalone (no
+previous/next stitching). `/v1/speech` is the interface; do not call the
+upstream endpoint directly from the pipeline.
 
 ---
 
@@ -130,16 +155,19 @@ Mapping for strategy A:
 Algorithm:
 
 1. Decode each mp3 to 48 kHz mono float, measure real duration.
-2. Place segments end to end with the pause plan's gap after each.
-3. Shift every word time by its segment offset **plus** the accumulated gaps.
-4. Write one `narration.wav` (48 kHz, 24-bit) with the same gaps.
-5. Assert: last word end <= audio length, and audio length - last pause ==
-   timeline end.
+2. Read `words[]` with tag tokens already stripped (S1). A `[pause]` tag leaves
+   a short lead-in silence at the head of the segment; keep it, it is
+   performance, and account for it in the word offsets.
+3. Place segments end to end with the pause plan's gap after each.
+4. Shift every word time by its segment offset **plus** the accumulated gaps.
+5. Write one `narration.wav` (48 kHz, 24-bit) with the same gaps.
+6. Assert: last word end <= audio length, and audio length - last pause ==
+   timeline end. Assert no word text matches `^\[.*\]$`.
 
 `timeline.json`:
 
 ```json
-{ "audio": "narration.wav", "durationSec": 101.42, "sampleRate": 48000,
+{ "audio": "narration.wav", "durationSec": 136.02, "sampleRate": 48000,
   "segments": [{ "id": "SEG01", "startSec": 0.0, "endSec": 3.91,
                  "words": [{ "text": "যিনি", "start": 0.12, "end": 0.44,
                              "clauseEnd": false, "sentenceEnd": false }] }],
@@ -275,9 +303,46 @@ Never chain across a scene change: the new scene needs its own plate.
 
 ---
 
-## S7 — assembly
+## S7 — sound: cues, score, SFX, mix
 
-**In** `clips/*.mp4`, `shots.json`, `timeline.json`.
+**In** `timeline.json`, `shots.json`, `narration.wav`.
+**Out** `score/cues.json`, `score/music.wav`, `score/sfx.wav`, `score/mix.wav`,
+`score/cues.md`, `score/stems/`.
+**State** `state/s7_sound.json` `{cuesSha, sections, events, lufs, margins}`.
+
+Design and level targets: `AUDIO.md`. The contract here is only the shape.
+
+1. **Derive the cue sheet.** Sections from shot boundaries and story beats
+   (raga, tala, bpm, level, palette). Events from three maps: narration
+   keywords -> cue, transition per join -> cue, motion class -> bed. Snap every
+   event to a word boundary or a cut frame, within one frame.
+2. **Music.** `score.py` renders the raga sections as one continuous file.
+   Tempo/raga changes only on shot starts. No loops.
+3. **SFX.** `sfx.py` renders every event locally. If
+   `sfx/hero/<cue>.opus` exists (a frozen ElevenLabs preview take), use it
+   instead. The renderer never blocks on the preview quota.
+4. **Mix.** `mix.py` ducks the bed from the merged word spans (70 ms attack,
+   450 ms release), applies per-cue gain/pan, then meters to -16 LUFS with true
+   peak <= -1.0 dBTP. Never duck from the audio envelope; silence in the
+   narration is not a gap in the story.
+
+```bash
+python tools/cues.py "$PROJ/shots.json" "$PROJ/timeline.json" -o "$PROJ/score/cues.json"
+python tools/score.py "$PROJ/score/cues.json" -o "$PROJ/score/music.wav"
+python tools/sfx.py   "$PROJ/score/cues.json" -o "$PROJ/score/sfx.wav"
+python tools/mix.py   "$PROJ/timeline.json" --voice "$PROJ/narration.wav" \
+  --music "$PROJ/score/music.wav" --sfx "$PROJ/score/sfx.wav" \
+  -o "$PROJ/score/mix.wav" --stems "$PROJ/score/stems"
+```
+
+Gate G6b: -16 +-1 LUFS, TP <= -1.0 dBTP, LRA 6-14, voice-minus-bed margin
+>= 6 LU on every spoken window, duck depth 2.5-3.5 dB.
+
+---
+
+## S8 — assembly
+
+**In** `clips/*.mp4`, `shots.json`, `timeline.json`, `score/mix.wav`.
 **Out** `final.mp4`, `qa/edl.json`.
 
 ### The duration identity
@@ -312,7 +377,7 @@ If it is not, the shot plan is wrong: regenerate or split, do not stretch.
 
 ### Graph
 
-One `filter_complex`, not 26 intermediate files:
+One `filter_complex`, not one intermediate file per shot:
 
 ```
 [0:v]trim=start=0:end=5.208,setpts=PTS-STARTPTS,fps=24,scale=720:1280,setsar=1[v0];
@@ -323,15 +388,20 @@ One `filter_complex`, not 26 intermediate files:
 [x24]fade=t=out:st=<T-0.35>:d=0.35[vout]
 ```
 
-Audio: concat `narration.wav`, then two-pass loudness:
+Audio: take `score/mix.wav` as a second input. It is already metered and
+ducked; assembly does not re-process it. A safety limiter is allowed, never a
+second `loudnorm` — re-normalising a finished mix is how the voice margin gets
+eaten.
 
 ```
-pass1: loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json
-pass2: loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=...:measured_LRA=...:measured_TP=...:measured_thresh=...
+ffmpeg -i picture.mp4 -i score/mix.wav \
+  -map 0:v -map 1:a -c:v libx264 -crf 17 -preset slow -pix_fmt yuv420p \
+  -profile:v high -movflags +faststart -c:a aac -b:a 192k \
+  -shortest final.mp4
 ```
 
-Mux `-map "[vout]" -map "[aout]" -c:v libx264 -crf 17 -preset slow -pix_fmt
-yuv420p -profile:v high -movflags +faststart -c:a aac -b:a 192k`.
+If the mix is missing, assembly fails. It never silently falls back to the
+narration alone — that would ship a film with no score and no error.
 
 ### Optional life pass
 

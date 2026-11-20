@@ -1,9 +1,10 @@
 # Tool contracts
 
-Seven CLIs. Not implemented yet — this file is the specification Phase 1 builds
-against. Keep them boring: Python 3.11, stdlib + `Pillow` + `requests`, no
-framework. Each one takes explicit paths, prints one JSON summary line on
-stdout, and writes its state file.
+Thirteen CLIs. Not implemented yet — this file is the specification Phase 1 builds
+against. Keep them boring: Python 3.11, stdlib + `Pillow` + `requests` +
+`numpy` (`scipy` only if a filter needs it), no framework. Each one takes
+explicit paths, prints one JSON summary line on stdout, and writes its state
+file.
 
 Shared flags on every tool:
 
@@ -36,13 +37,15 @@ index; without it the output fails G0 on purpose.
 
 ```
 tts.py script.json --out tts/ --url http://127.0.0.1:8100
-       --voice <id> --model eleven_v4 [--concurrency 3] [--bakeoff]
+       --voice <id> --model eleven_v4 [--tags inline|off] [--concurrency 3]
 ```
 
-One `POST /v1/speech` per segment with `words:true`. Writes
+One `POST /v1/speech` per segment with `words:true`. With `--tags inline`
+(default) the segment's tag is sent inside `text`, mapped per `PIPELINE.md`:
+`[serious]` -> `[low, grave]`, `[short pause]` -> `[pause]`. Writes
 `SEG01.mp3`, `SEG01.words.json`, `SEG01.request.json`, and normalises each mp3
-to `SEG01.norm.wav` at -18 LUFS. `--bakeoff` renders the first three segments
-with every candidate voice/model into `tts/bakeoff/` and stops.
+to `SEG01.norm.wav` at -18 LUFS. Tag tokens are stripped from the words list
+before it is written.
 
 Retries: 5xx and network -> exponential backoff, 4 attempts. 4xx -> fail the
 item, never the batch. Reads `concurrency` from `/health` and refuses to exceed
@@ -110,21 +113,68 @@ Implements the moderation ladder and the drift/motion triage from `QA.md`.
 Chained shots extract the previous clip's last frame first. Refuses to run a
 shot whose keyframe is not accepted.
 
+## cues.py
+
+```
+cues.py shots.json timeline.json -o score/cues.json [--keywords keywords.yaml]
+```
+
+Derives the section list and the event list from the shot plan and the word
+clock. Sections change only on shot starts. Events come from three maps:
+narration keyword -> cue, transition -> cue, motion class -> bed. Snaps every
+event to a word boundary or cut frame, enforces the density caps, and writes a
+human-readable `score/cues.md` for review.
+
+## score.py
+
+```
+score.py score/cues.json -o score/music.wav [--sample-rate 48000] [--seed 7]
+```
+
+Renders raga sections with the instrument set from `templates/audio/` plus
+`bansuri`, `sarangi`, `damaru`, `conch`, `bell_temple`, `tanpura`. One
+continuous pass, crossfaded sections, no loops. Deterministic for a given
+`--seed`.
+
+## sfx.py
+
+```
+sfx.py score/cues.json -o score/sfx.wav [--hero score/hero] [--seed 7]
+```
+
+Renders every event. Uses `score/hero/<cue>.opus` when present (a frozen
+ElevenLabs preview take), otherwise the local recipe. Never calls the network;
+the hero takes are fetched by a separate one-off command and committed to the
+project.
+
+## mix.py
+
+```
+mix.py timeline.json --voice narration.wav --music score/music.wav
+       --sfx score/sfx.wav -o score/mix.wav [--stems score/stems]
+```
+
+Ducks the bed from merged word spans (70 ms attack, 450 ms release, -3 dB),
+applies per-cue gain and pan, meters to -16 LUFS with TP <= -1.0 dBTP, writes
+stems and `score/cues.md` updates. Fails if the voice-minus-bed margin is under
+6 LU; does not silently re-normalise.
+
 ## assemble.py
 
 ```
-assemble.py shots.json timeline.json --clips clips/ -o final.mp4
-            [--xfade 0.30] [--tail 0.4] [--crf 17]
+assemble.py shots.json timeline.json --clips clips/ --audio score/mix.wav
+            -o final.mp4 [--xfade 0.30] [--tail 0.4] [--crf 17]
 ```
 
-Builds `qa/edl.json`, one `filter_complex`, two-pass loudnorm, muxes AAC 192k.
-Asserts the duration identity, that every clip is long enough after trimming,
-and that no shot is stretched past `stretchMax`.
+Builds `qa/edl.json`, one `filter_complex`, muxes the finished `mix.wav` (AAC
+192k). Asserts the duration identity, that every clip is long enough after
+trimming, and that no shot is stretched past `stretchMax`. Refuses to run
+without the mix.
 
 ## qa.py
 
 ```
-qa.py <project-dir> --gate all|g0|g1|g2|g3|g4|g5|g6 [--json qa/report.json]
+qa.py <project-dir> --gate all|g0|g1|g2|g3|g4|g5|g6|g6b|audio [--json qa/report.json]
 ```
 
 Runs the machine checks from `QA.md` and prints a table. Never mutates project

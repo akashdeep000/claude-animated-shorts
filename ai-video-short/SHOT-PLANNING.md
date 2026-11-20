@@ -129,35 +129,51 @@ its own shot next round.
 
 ## Worked example (this mission)
 
-The script is 17 prose segments, 252 words. At a measured Bengali narration
-rate of ~3.4 words/s that is ~74 s of speech; the pause plan adds ~8 s, so
-`narrationDuration ~= 82 s`.
+The script is 17 prose segments, 252 words. At the measured Bengali narration
+rate of **11.2-12.8 chars/s (1.95-2.18 words/s)** that is ~116-129 s of speech;
+the pause plan adds ~8 s, so `narrationDuration ~= 136 s`. At `TARGET` 4.8 s
+that is **~28 shots**; the DP returns 27-30 at 4.2-5.5 s.
 
-v1 split per segment and got 26 shots, of which nine were under 3 s. The DP
-returns **18-20 shots** at 4.2-5.4 s, merging the short segments:
+v1 split per segment and produced 26 shots, nine of them under 3 s (then
+stretched to fill). The DP merges the short segments and splits the long beats:
 
 | shots | covers | beat | note |
 |---|---|---|---|
-| S01 | SEG01-02 | hook: are they the same? | 4.0 s, protected, no split |
-| S02 | SEG03 | the confusion is real | comparison composition |
-| S03-S04 | SEG04-06 | Garuda's birth, Vinata, Aruna | two shots, one location |
-| S05 | SEG07a | Kadru's deceit | 4.2 s |
-| S06 | SEG07b-08a | Vinata enslaved | B-shot, tighter |
-| S07-S08 | SEG08 | the amrit war, Indra | impact + aftermath |
-| S09 | SEG08 tail | Vishnu's boon, the vahana | chain from S08 |
-| S10 | SEG09 | Jatayu introduced | new location plate |
-| S11-S12 | SEG10-12 | nephew, Dasharatha's friend | |
-| S13-S14 | SEG13 | the abduction, the fight | impact pair |
-| S15 | SEG14 | the wing | flash transition in |
-| S16-S17 | SEG15-16 | ten heads regrow, Jatayu falls | |
-| S18-S19 | SEG17 | death on Rama's lap, last rites | longest beat, 2 shots |
+| S01 | SEG01 | hook: are they the same? | 4.0 s, protected, no split |
+| S02 | SEG02 | direct address | negative space, one figure |
+| S03 | SEG03 | the confusion is real | comparison composition |
+| S04 | SEG04 | Garuda's birth, Kashyapa | new plate: kailash |
+| S05 | SEG05 | Vinata | two-shot |
+| S06 | SEG06 | Aruna the charioteer | sun key, new plate |
+| S07 | SEG07a | Kadru's deceit | low angle, shadow |
+| S08 | SEG07b | Vinata enslaved | B-shot, tighter |
+| S09 | SEG08a | the amrit war begins | wide, indra-court |
+| S10 | SEG08b | Indra strikes | impact |
+| S11 | SEG08c | Garuda takes the amrit | chain from S10 |
+| S12 | SEG08d | Vishnu's boon | flash in, radiant |
+| S13 | SEG08e | the vahana | centred, gold bloom |
+| S14 | SEG09 | Jatayu introduced | new plate: forest |
+| S15 | SEG10 | nephew, Aruna's son | two-shot |
+| S16 | SEG11 | Dasharatha's friend | forest clearing |
+| S17 | SEG12 | the abduction spotted | sky-chariot, parallax |
+| S18 | SEG13a | Jatayu stands in the path | wide vista |
+| S19 | SEG13b | the fight begins | impact |
+| S20 | SEG13c | chariot against wings | parallax |
+| S21 | SEG13d | Jatayu strikes | impact |
+| S22 | SEG14a | the wing is cut | cut-shake, flash in |
+| S23 | SEG14b | the fall | slow, sway |
+| S24 | SEG15a | ten heads regrow | low angle |
+| S25 | SEG15b | Jatayu hits the ground | impact tail |
+| S26 | SEG16 | Rama arrives | new plate |
+| S27 | SEG17a | death on Rama's lap | close, still |
+| S28 | SEG17b | the last rites | wide, empty foreground |
 
 The exact numbers come out of `timeline.json`; the table is the shape, not a
 spec. Do not hand-write boundaries.
 
 ## Beat to shot archetype
 
-Keeps the visual literal and stops 18 clips of people standing in fields.
+Keeps the visual literal and stops 28 clips of people standing in fields.
 
 | beat type | archetype | motionClass |
 |---|---|---|
@@ -181,6 +197,6 @@ location or time change              -> "flash"
 impact marked in the text            -> "cut-shake"
 ```
 
-`flash` is a 5-frame white-gold bloom. It is what makes 18 unrelated
+`flash` is a 5-frame white-gold bloom. It is what makes 28 unrelated
 generations feel like one film, and it is measured behaviour from the reference
 channel (`../references/STYLE_BIBLE.md`), not an invention.

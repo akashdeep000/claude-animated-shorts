@@ -20,7 +20,7 @@ compromises.
 | Readability trap list | AI adds its own traps (fake text, extra limbs, character drift) |
 | QA with numbers: ffprobe contract, loudness, black/frozen frames, contact sheets | unchanged, still the last line of defence |
 | Deliverable layout + "save after every step" | unchanged |
-| `templates/audio/` mix chain (if music is ever asked for) | still the best loudness/ducking code in the repo |
+| `templates/audio/` mix chain | it is now the base of the generated score: loudness meter, ducking, stems |
 | The style bible's measured transition behaviour (hard cuts rare, 4-frame flash, continuous moves) | tells us how to join AI shots that cannot physically connect |
 
 ## 2. What we drop
@@ -43,7 +43,7 @@ Each one is addressed by a stage or a gate, not by "be careful".
 | 3 | one style block, no reference images | costumes, faces and palette drift between shots | character sheet PNG passed as a `files=[...]` reference to every generation |
 | 4 | every keyframe generated before any review | 26 frames of the wrong look | 3-shot look test first, then drafts -> contact sheet -> regenerate failures only |
 | 5 | no text-artifact check | AI glyphs get baked into the video | OCR pass on every keyframe, regenerate on detection |
-| 6 | emotion tags stripped, `[short pause]` ignored | flat delivery, no breathing room, beats feel rushed | TTS bake-off (v3 tags vs v4 prosody) + explicit pause plan in the timeline |
+| 6 | emotion tags stripped, `[short pause]` ignored | flat delivery, no breathing room, beats feel rushed | tags mapped to the official audio-tag vocabulary and kept inline for `eleven_v4`; `[short pause]` also becomes real silence in the timeline |
 | 7 | no continuity between adjacent shots | cuts read as 26 unrelated images | chain last frame of clip N as start frame of N+1 inside a scene |
 | 8 | moderation handled by retrying a rewritten prompt | wasted credits, inconsistent prompts | fixed ladder: same prompt twice -> lexicon neutralisation -> minimal neutral -> storyboard change, all logged |
 | 9 | no state, no resume | run died at 6/26 and lost the plan | per-stage `state/*.json` with input hashes; idempotent commands |
@@ -56,13 +56,17 @@ Each one is addressed by a stage or a gate, not by "be careful".
 - **Resolution:** 720x1280 in, 720x1280 out. The start frame keys the video
   model's output size; there is no upscale step in v2. A 1080x1920 pipeline
   would need generative upscale and is out of scope.
-- **Short length:** 45-120 s. This script lands near 95-105 s, which is fine.
-  The 55-70 s rule in `../SKILL.md` applies to the three.js format only.
-- **Shot cadence:** target 4.8 s, hard range 4.0-5.6 s. On ~100 s that is
-  ~21-24 shots. Calmer than 26 cuts in 100 s, and every shot can actually move.
+- **Short length:** 60-150 s. This script lands near **136 s** (2:16) once the
+  measured Bengali rate and the pause plan are applied — longer than the first
+  estimate, and accepted. The 55-70 s rule in `../SKILL.md` applies to the
+  three.js format only.
+- **Shot cadence:** target 4.8 s, hard range 4.0-5.6 s. On ~136 s that is
+  **~28 shots** — 4.8 s per cut, slow enough for the model to move.
 - **Structure:** one narration spine. No per-shot voice acting, no dialogue.
-- **Sound:** narration only. No music, no SFX, unless asked. If asked, reuse
-  `templates/audio/mix.py` with the bed at -24 LUFS under voice at -16.
+- **Sound:** narration, plus a generated score and generated SFX (see
+  `AUDIO.md`). Music at -24 LUFS ducked under voice at -16. Music and the
+  default SFX are local; the ElevenLabs SFX preview is an optional hero pass,
+  never a dependency.
 - **Captions:** off. If asked, burn them per shot, never per word.
 - **Provenance:** every generated asset keeps its request JSON
   (`*.generation.json`, `keyframes/manifest.json` with prompt + attempt).
@@ -83,11 +87,15 @@ Exit: all three services answer, or the blocker is named in the report.
 
 ### Phase 1 — timing spine (45 min, cheap)
 
-- [ ] `script.json` from the verbatim script. G0 hash check.
-- [ ] Bake-off: 3 segments x 2 voices x 2 models (v4 prosody vs v3 tags),
-      12 short renders. Blind listen, pick one voice and one emotion strategy,
-      record the choice in `qa/tts-bakeoff.md`.
-- [ ] Full synthesis, pause plan, `timeline.json`. G1.
+- [ ] `script.json` from the verbatim script. G0 hash check. The tag map
+      (`[thoughtful]`, `[serious]` -> `[low, grave]`, `[short pause]` ->
+      `[pause]`) is resolved here and written into each segment's `ttsText`;
+      `tts.py` only sends it.
+- [ ] One confirm listen: the locked voice (`3AMU7jXQuQa3oRvRqUmb`) on the
+      opening and the death line, tags inline on `eleven_v4`. No bake-off — the
+      voice and the model are already decided. Record the files in `qa/voice.md`.
+- [ ] Full synthesis, alignment minus tag tokens, pause plan, `timeline.json`.
+      G1.
 
 Exit: `narration.wav` exists, every word timed, duration known to 10 ms.
 
@@ -111,15 +119,15 @@ Exit: three keyframes at the bar, reviewed by a fresh agent or by the user.
 
 Exit: `shots.json` covers 100 % of words; every shot has two prompts.
 
-### Phase 4 — keyframes (60-90 min, ~26-34 images)
+### Phase 4 — keyframes (60-90 min, ~28-34 images)
 
 - [ ] Draft all keyframes, 4 concurrent, conditioned on the sheet and plate.
 - [ ] Contact sheet -> review -> regenerate failures (budget 30 %).
 - [ ] Text-artifact OCR, aspect fit, manifest. G3.
 
-Exit: 26 frames, one look, zero text artifacts.
+Exit: every planned frame, one look, zero text artifacts.
 
-### Phase 5 — clips (90-120 min, ~26-34 clips at 3 concurrent)
+### Phase 5 — clips (90-120 min, ~28-34 clips at 3 concurrent)
 
 - [ ] Generate 4.8 s clips. Retry ladder on moderation.
 - [ ] Per-clip probe + drift/motion triage. Regenerate out-of-range clips.
@@ -127,21 +135,32 @@ Exit: 26 frames, one look, zero text artifacts.
 
 Exit: all clips 720x1280/24/125 f, motion present, pose held. G4.
 
-### Phase 6 — assembly (45 min)
+### Phase 6 — sound (45 min)
+
+- [ ] Derive `score/cues.json` from `timeline.json` + `shots.json`; review the
+      sheet before rendering a sample.
+- [ ] Music: `score.py` renders the raga sections; SFX: `sfx.py` renders the
+      events, plus the two-cue hero pass if the preview quota is fresh.
+- [ ] `mix.py`: duck from word spans, limit, write stems + `cues.md`. G6b.
+- [ ] Listen once end to end with the picture before the final mux.
+
+Exit: `mix.wav` at -16 LUFS with voice-margin >= 6 LU on every spoken window.
+
+### Phase 7 — assembly (45 min)
 
 - [ ] EDL from timeline; transition per join.
-- [ ] Two-pass loudnorm, AAC 192k, faststart.
+- [ ] Mux `final.mp4` with `mix.wav`, AAC 192k, faststart.
 - [ ] Join QA: contact sheet of every cut, no black/frozen frames. G5, G6.
 
 Exit: `final.mp4` within 0.3 s of narration, -16 LUFS, no defects on the
 contact sheet.
 
-### Phase 7 — report
+### Phase 8 — report
 
 - [ ] `README.md`: pipeline, commands, timings, credit spend, compromises.
 - [ ] Report: duration, shot count, path, what was compromised and why.
 
-Rough wall clock: **5-7 h** unattended, dominated by generation latency. Token
+Rough wall clock: **6-8 h** unattended, dominated by generation latency. Token
 cost is low; the expensive resources are video credits and patience.
 
 ## 6. Parallelism map
@@ -152,8 +171,13 @@ Phase 2  sheet → plates → look test (sequential, cheap)
 Phase 3  shots.json (single pass)
 Phase 4  keyframes ── 4 at a time ──► review -> regen failures
 Phase 5  clips ── 3 at a time, dependency: keyframe + previous clip in scene
-Phase 6  sequential
+Phase 6  cues.json → music + sfx local render (seconds) ──► mix
+Phase 7  sequential
 ```
+
+Phase 6 overlaps Phase 5: the cue sheet only needs `timeline.json`, so music
+can be rendered while clips are still generating. Only the ducking and the mux
+need the final picture length.
 
 Hard constraint: vibes is one account, one session. Above 3 concurrent
 generations the account sees rate limits and the run gets slower, not faster.
@@ -168,30 +192,47 @@ The first run's "4 max" was the upper bound, not the optimum.
 | moderation on battle/death beats | certain | retries | lexicon ladder + mythic stylisation; budget 30 % waste |
 | character sheet does not lock (Gemini edits instead of matching) | medium | drift | weight the reference instruction, regenerate the sheet until it is stable, use it as an edit source not a style hint |
 | narration longer than planned | medium | shot count mismatch | plan_shots is derived, not fixed; it absorbs any duration |
+| score fights the narration | medium | words get buried | duck from word spans, keep melody below 1.5 kHz, re-check the 6 LU margin |
+| SFX preview quota already spent | high | no hero takes | local synth always renders every cue; the hero pass is optional |
 | disk | low | run dies | 43 GB free; each clip ~4 MB, frames ~300 KB; keep only deliverables |
 | AI invents text on frames | high | unshippable | OCR gate + negative prompt; regenerate, never crop around it |
 | one clip drifts badly and cannot be fixed by prompt | medium | a bad cut | fallback: regenerate with a tighter framing; last resort: allow the drift and note it |
 
-## 8. Open decisions (need an answer before Phase 1)
+## 8. Decisions (resolved)
 
-1. **Voice.** `713Bv3p3NNV0DJn7YgBo` (Valf, used in v1) vs
-   `OHhJ32z5ulznaiTfV1cI` (Shadhin Bangla, warm) vs
-   `VizHiwkPO7hXc967v4tE` (Rakib, deep/authoritative). Default: run the
-   bake-off, pick on the recording.
-2. **Emotion delivery.** v4 + prosody map (proven) vs v3 + inline `[tags]`
-   (expressive, unverified for Bengali). Default: bake-off decides.
-3. **Pauses.** `[short pause]` becomes real silence. Proposed: 0.9 s at tag,
-   0.5 s at sentence end, 0.3 s at clause, 0.0 s elsewhere. Confirm or adjust.
-4. **Music.** None (default) or a low tanpura/ambient bed at -24 LUFS.
-5. **Captions.** None (default). The reference channel uses word captions;
-   the repo rule is none unless asked.
-6. **Reuse.** The interrupted run left 26 keyframes and 6 clips in
-   `~/Videos/garuda-jatayu`. Reuse them as-is, reuse only the approved ones, or
-   start clean at `garuda-jatayu-v2`? Default: start clean, keep the old folder
+1. **Voice.** `3AMU7jXQuQa3oRvRqUmb` — *Viraj, Rich, Confident and Expressive*
+   (`narrative_story`, hi-IN library voice, 693k clones, ₹free tier). It speaks
+   Bengali through the multilingual model; the pilot is rendered with it and the
+   accent is accepted unless a listen says otherwise.
+   Measured rate at `stability .55 / style .35 / speed 1.0`: **11.2-12.8
+   chars/s**, i.e. **1.95-2.18 words/s**. This script (1,539 chars) therefore
+   runs **~128 s + ~8 s of pauses = ~136 s**, not the 82 s estimated from an
+   English words-per-second figure. Shot count at 4.8 s is **~28**.
+2. **Emotion delivery.** `eleven_v4` **with inline audio tags** — no more
+   prosody mapping. Verified on this machine:
+   - `[thoughtful] হ্যাঁ।` = 1.31 s vs `হ্যাঁ।` = 0.84 s; the tag is a
+     direction, not speech (the tag alone returns HTTP 422);
+   - `[thunder rumbling] হ্যাঁ।` inserts ~1.35 s of real sound;
+   - tags work through the same `/v1/speech` request, inline in `text`.
+   The script's tags map to the official vocabulary: `[thoughtful]` and
+   `[excited]` pass through, `[serious]` becomes `[low, grave]`, `[sad]` stays,
+   and `[short pause]` becomes `[pause]`. The full map is in `PIPELINE.md` §S1;
+   the sound policy it implies is in `AUDIO.md`.
+3. **Pauses.** Real silence in the timeline: 0.9 s at a pause tag, 0.5 s at a
+   sentence end, 0.3 s at a clause, 0 elsewhere. `[pause]` also asks the model
+   for a beat; both are used (the tag for performance, the inserted silence for
+   the clock).
+4. **Music and SFX.** Generated programmatically. Music: local raga engine
+   (numpy, deterministic, frame-accurate). SFX: local synth by default, with an
+   optional pass through the ElevenLabs anonymous sound-generation endpoint for
+   the two hero cues (conch, temple bell) — it works without a token but the
+   preview allows only **two requests of four takes**, so it can never be a
+   dependency. Both paths, with the measured limits, are in `AUDIO.md`.
+5. **Captions.** Off.
+6. **Reuse.** Clean start at `~/Videos/garuda-jatayu-v2`. The old folder stays
    untouched as a comparison.
-7. **Look drift.** The reference clip's subject drifts (the vulture rises from
-   Rama's lap). Match that energy or hold the pose harder? Default: hold the
-   pose, move the camera.
+7. **Look drift.** Hold the pose, move the camera. Pose-lock sentence in every
+   video prompt; the model's drift is the enemy, not the style.
 
 ## 9. Definition of done
 
@@ -201,5 +242,5 @@ Pilot specification and acceptance criteria: `missions/garuda-jatayu.md`.
   duration within 0.3 s of the narration.
 - Every word of the verbatim script is spoken and illustrated.
 - No text artifacts, no extra characters, no unapproved look changes.
-- All seven gates ran; every waiver is listed in `README.md` with its reason.
+- All eight gates ran (G0–G6b); every waiver is listed in `README.md` with its reason.
 - Two consecutive runs from a clean checkout produce the same shot list.

@@ -8,7 +8,7 @@ renderer.
 | look | 2D characters in a painted 3D world | premium 2D Indian mythological comic-book illustration |
 | renderer | three.js inside Remotion, on your PC | Gemini keyframes -> vibes.ai image-to-video |
 | clock | `words.json` word timings | `timeline.json` word timings incl. pauses |
-| output | 1440x2560, 55-70 s, music + SFX | 720x1280, 45-120 s, narration only |
+| output | 1440x2560, 55-70 s, music + SFX | 720x1280, 60-150 s, generated score + SFX |
 | cost | GPU time, no credits | video credits, no GPU |
 | best for | crowds, architecture, camera language you control exactly | faces, painted mythic scenes, one hero figure |
 
@@ -34,13 +34,14 @@ script (verbatim)
   -> shot plan solved from the real word boundaries
   -> Gemini keyframes, one character sheet, one look
   -> vibes.ai 9:16 clips, 720x1280, pose-locked
+  -> generated raga score + synthesized SFX, ducked under the voice
   -> ffmpeg EDL cut to the narration, -16 LUFS
 ```
 
 Read `ai-video-short/PLAN.md` first: it lists what was kept from the three.js
 skill, the twelve defects in the first ad-hoc run (stretched clips, keyframe
 prompts reused as video prompts, no resume, no reference conditioning), and the
-seven gates that prevent them.
+eight gates that prevent them.
 
 Status: **plan + contracts.** Stage CLIs are specified in
 `ai-video-short/tools/CONTRACTS.md`; no pipeline code has been written yet.
@@ -55,9 +56,10 @@ Status: **plan + contracts.** Stage CLIs are specified in
 | `ai-video-short/SHOT-PLANNING.md` | word timings -> shots: constants, DP, worked example |
 | `ai-video-short/STYLE-LOCK.md` | locked style block, character sheet, measured palette |
 | `ai-video-short/PROMPTS.md` | prompt algebra, motion classes, moderation ladder |
-| `ai-video-short/QA.md` | gates G0-G6, thresholds, defect ledger, ship checklist |
+| `ai-video-short/AUDIO.md` | generated raga score + synthesized SFX, cue sheet, levels, ducking |
+| `ai-video-short/QA.md` | gates G0–G6b, thresholds, defect ledger, ship checklist |
 | `ai-video-short/schemas/` | JSON Schemas for script, timing, shots, state |
-| `ai-video-short/tools/CONTRACTS.md` | the seven CLIs, their I/O and exit codes |
+| `ai-video-short/tools/CONTRACTS.md` | the thirteen CLIs, their I/O and exit codes |
 | `ai-video-short/missions/garuda-jatayu.md` | the pilot script, cast, visual rules and acceptance criteria |
 | `templates/bridge/` | the full source of the bridge short: world, characters, ink, lens blur, grade, story/camera |
 | `templates/audio/` | the synthesized sound: SFX, march music, the mix with ducking and loudness |
@@ -73,8 +75,9 @@ Status: **plan + contracts.** Stage CLIs are specified in
    `~/.claude/skills/ai-video-short/` (`ai-video-short/`).
 2. For three.js: [Remotion](https://www.remotion.dev/) with `@remotion/three`,
    plus Node, Python 3 and ffmpeg.
-   For AI video: Node 22+, Python 3.11+ with `gemini-webapi`, ffmpeg 7+, a
-   running elevellab (`127.0.0.1:8100`) and a vibes.ai account.
+   For AI video: Node 22+, Python 3.11+ with `gemini-webapi`, `numpy`
+   (`scipy` only if needed), ffmpeg 7+, a running elevellab (`127.0.0.1:8100`)
+   and a vibes.ai account.
 3. In Claude Code: *"Use the cartoon short skill and make a short about …"* or
    *"Use the ai-video-short skill and make this script: …"*.
 

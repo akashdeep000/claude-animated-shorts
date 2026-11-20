@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/mromidev/claude-animated-shorts/ai-video-short/schemas/script.schema.json",
+  "$id": "https://github.com/akashdeep000/claude-animated-shorts/ai-video-short/schemas/script.schema.json",
   "title": "script.json",
   "description": "Parsed narration script: the prosodic segments, their emotion, and the storyboard intent for each. Produced by S0 from script-tagged.txt. The source text is never edited here.",
   "type": "object",
@@ -24,14 +24,24 @@
       "required": ["voiceId", "modelId", "outputFormat", "emotionStrategy"],
       "additionalProperties": false,
       "properties": {
-        "voiceId": { "type": "string" },
+        "voiceId": {
+          "type": "string",
+          "description": "Locked for the pilot: 3AMU7jXQuQa3oRvRqUmb (Viraj - Rich, Confident and Expressive)."
+        },
         "modelId": {
           "enum": ["eleven_v3", "eleven_v4", "eleven_multilingual_v2", "eleven_turbo_v2_5"]
         },
         "outputFormat": { "type": "string", "default": "mp3_44100_128" },
         "emotionStrategy": {
           "enum": ["prosody-map", "inline-tags"],
-          "description": "prosody-map = strip tags, map to voiceSettings. inline-tags = keep [tags] in the text (eleven_v3)."
+          "default": "inline-tags",
+          "description": "inline-tags (default) = keep the audio tag in the text and let eleven_v4 perform it. prosody-map = strip tags and vary voiceSettings instead (legacy)."
+        },
+        "tagMap": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": { "serious": "low, grave", "short pause": "pause" },
+          "description": "Script tag -> tag sent to the TTS. A value of \"\" drops the tag."
         },
         "languageCode": { "type": "string", "default": "bn" }
       }
@@ -49,7 +59,12 @@
           "text": {
             "type": "string",
             "minLength": 1,
-            "description": "Spoken text for this segment. No bracketed tags when emotionStrategy=prosody-map."
+            "description": "Spoken text for this segment, with no bracketed tags. What a human would read aloud."
+          },
+          "ttsText": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Text actually sent to the TTS: the tag, already mapped through defaults.tagMap, prepended to text when emotionStrategy=inline-tags. Equals text otherwise."
           },
           "emotion": {
             "enum": ["thoughtful", "excited", "serious", "sad", "neutral", "short pause"]

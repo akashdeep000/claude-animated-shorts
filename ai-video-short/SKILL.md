@@ -1,6 +1,6 @@
 ---
 name: ai-video-short
-description: Make a fully narrated vertical story short (45-120 s) with word-timed TTS, Gemini-generated style-locked keyframes, vibes.ai image-to-video clips, and an ffmpeg assembly cut to the narration. Use when the user asks for an AI-generated animated short, a narrated mythic/history/story video, "a video like the Ramayana part 1", a Bengali/Hindi story short, or names elevellab, Gemini-API or vibes.ai.
+description: Make a fully narrated vertical story short (60-150 s) with word-timed TTS, Gemini-generated style-locked keyframes, vibes.ai image-to-video clips, a generated raga score + SFX, and an ffmpeg assembly cut to the narration. Use when the user asks for an AI-generated animated short, a narrated mythic/history/story video, "a video like the Ramayana part 1", a Bengali/Hindi story short, or names elevellab, Gemini-API or vibes.ai.
 ---
 
 # AI video short — narrated keyframes + image-to-video
@@ -20,8 +20,9 @@ Detail lives in:
 - `SHOT-PLANNING.md` — timings to shots algorithm
 - `STYLE-LOCK.md` — locked style block, character sheet, palette targets
 - `PROMPTS.md` — prompt algebra, motion classes, moderation ladder
+- `AUDIO.md` — generated raga score + synthesized SFX, levels, ducking
 - `QA.md` — gate checks, thresholds, defect taxonomy
-- `tools/CONTRACTS.md` — the seven CLIs this workflow assumes
+- `tools/CONTRACTS.md` — the thirteen CLIs this workflow assumes
 - `missions/garuda-jatayu.md` — the pilot: verbatim script, cast, visual rules,
   acceptance criteria
 
@@ -45,10 +46,11 @@ Detail lives in:
    and the text-artifact check first. Video credits are the expensive stage.
 7. **Resumable by construction.** Every stage writes
    `state/<stage>.json` with an input hash. Re-running is idempotent. A run
-   that dies at shot 6 of 26 must restart at shot 6.
+   that dies at shot 6 of 28 must restart at shot 6.
 8. **Download generated media immediately.** vibes CDN URLs expire.
-9. **No captions, no logos, no music** unless asked. Music templates from
-   `../templates/audio/` are available if asked.
+9. **Music and SFX are generated, not licensed.** Local raga engine for the
+   score, local synth for effects, optional quota-limited ElevenLabs hero takes.
+   Levels: voice -16, music -24 ducked -3, SFX -18. Captions stay off.
 10. **Report compromises, never hide them.** Every gate that was waived goes in
     the final report and in `README.md`.
 
@@ -72,14 +74,17 @@ script.json ──► S1 TTS (elevellab) ──► tts/*.mp3 + tts/*.words.json
                                                         │ S6 clips (vibes.ai)
                                                         ▼
                                                    clips/*.mp4
-                                                        │ S7 assembly (ffmpeg)
+                                                        │
+              timeline.json + shots.json ──► S7 sound ───┤
+                   cues -> music + sfx -> mix           │ S8 assembly (ffmpeg)
                                                         ▼
                                                    final.mp4 + QA
 ```
 
 Parallelism: S1 segments at 3 concurrent (service limit). S5 at 4. S6 at 3.
-S1/S2 and S4 can overlap once `script.json` exists. Everything else is
-sequential.
+S1/S2 and S4 can overlap once `script.json` exists. S7 only needs
+`timeline.json` + `shots.json`, so music and SFX render while S6 is still
+running; only the final mix and S8 wait for the last clip.
 
 ## Stage commands
 
@@ -91,10 +96,10 @@ PROJ=~/Videos/garuda-jatayu
 # S0 — parse the script, keep the hash, build the beat map
 python tools/parse_script.py "$PROJ/script-tagged.txt" -o "$PROJ/script.json"
 
-# S1 — synthesize per segment (default: eleven_v4 + prosody map)
+# S1 — synthesize per segment (eleven_v4 + inline audio tags)
 python tools/tts.py "$PROJ/script.json" --out "$PROJ/tts" \
-  --url http://127.0.0.1:8100 --voice 713Bv3p3NNV0DJn7YgBo \
-  --model eleven_v4 --concurrency 3
+  --url http://127.0.0.1:8100 --voice 3AMU7jXQuQa3oRvRqUmb \
+  --model eleven_v4 --tags inline --concurrency 3
 
 # S2 — measure audio, insert planned pauses, build the master clock
 python tools/timeline.py "$PROJ/tts" "$PROJ/script.json" \
@@ -116,9 +121,16 @@ python tools/keyframes.py "$PROJ/prompts/keyframe" --out "$PROJ/keyframes" \
 python tools/clips.py "$PROJ/shots.json" --keyframes "$PROJ/keyframes" \
   --out "$PROJ/clips" --concurrency 3
 
-# S7 — EDL, xfade/cut graph, loudness, mux
+# S7 — sound: cue sheet, score, sfx, mix
+python tools/cues.py "$PROJ/shots.json" "$PROJ/timeline.json" -o "$PROJ/score/cues.json"
+python tools/score.py "$PROJ/score/cues.json" -o "$PROJ/score/music.wav"
+python tools/sfx.py "$PROJ/score/cues.json" -o "$PROJ/score/sfx.wav"
+python tools/mix.py "$PROJ/timeline.json" --voice "$PROJ/narration.wav" \
+  --music "$PROJ/score/music.wav" --sfx "$PROJ/score/sfx.wav" -o "$PROJ/score/mix.wav"
+
+# S8 — EDL, xfade/cut graph, mux with the mix
 python tools/assemble.py "$PROJ/shots.json" "$PROJ/timeline.json" \
-  --clips "$PROJ/clips" -o "$PROJ/final.mp4"
+  --clips "$PROJ/clips" --audio "$PROJ/score/mix.wav" -o "$PROJ/final.mp4"
 
 # gates
 python tools/qa.py "$PROJ" --gate all
@@ -135,6 +147,7 @@ python tools/qa.py "$PROJ" --gate all
 | G4 clips | 720x1280/24 fps/125 f, in-range drift, motion present | S7 |
 | G5 assembly | duration +-0.3 s, xfade offsets, no black/frozen joins | deliver |
 | G6 final | 720x1280, 24 fps, AAC present, -16 LUFS +-1, loudness true peak <= -1.0 dBTP | deliver |
+| G6b audio | voice-bed margin >= 6 LU on spoken windows, duck 2.5-3.5 dB, cue edges clean, stems sum to mix | deliver |
 
 `G3` and the visual half of `G4` need one vision review per batch. Everything
 else is machine-checkable.
@@ -153,6 +166,7 @@ else is machine-checkable.
 | wrong output size | start frame not 720x1280 | rebuild the frame with `ImageOps.fit` |
 | cut lands off-beat | shot timing invented | re-run S3 from `timeline.json` |
 | run died mid-batch | no state | expected: re-run the same command, it resumes |
+| SFX preview returns `quota_exceeded` | the anonymous ElevenLabs preview is spent (~2 requests) | expected: the local synth always rendered every cue; freeze hero takes only when the quota is fresh |
 
 ## Deliverables
 
@@ -171,9 +185,11 @@ else is machine-checkable.
   prompts/              <shot>.keyframe.txt, <shot>.video.txt
   keyframes/            <shot>.jpg + manifest.json
   clips/                <shot>.mp4 + <shot>.generation.json
+  score/                cues.json, cues.md, music.wav, sfx.wav, mix.wav, stems/
   state/                <stage>.json
   qa/                   gate reports, contact sheets
 ```
 
-See `PLAN.md` before starting a new video: it lists the decisions that are
-still open (voice, emotions, shot cadence, music, captions).
+See `PLAN.md` before starting a new video: it records the resolved decisions
+(voice, emotion tags, shot cadence, sound, captions) and the phases that
+enforce them.

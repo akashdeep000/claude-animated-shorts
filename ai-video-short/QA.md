@@ -1,8 +1,8 @@
 # QA
 
-Seven gates. A gate is a command plus a threshold, not an opinion. Vision review
-is used only where no measurement exists, and it is done by an agent that did not
-write the prompt.
+Eight gates: G0–G6 plus the audio gate G6b. A gate is a command plus a
+threshold, not an opinion. Vision review is used only where no measurement
+exists, and it is done by an agent that did not write the prompt.
 
 ## G0 — script
 
@@ -26,7 +26,26 @@ PY
 
 Pass: `words[i].start <= words[i].end < words[i+1].start`; last word end within
 the audio; `abs(audio_duration - timeline.durationSec) < 0.1`;
-`abs(sum(segment durations + pauses) - audio_duration) < 0.02`.
+`abs(sum(segment durations + pauses) - audio_duration) < 0.02`; **no word text
+matches `^\[[^\]]+\]$`** (a tag token that survived S1).
+
+Tag checks (audio tags are the emotion lane, so they can fail silently):
+
+```bash
+# a tag must never be audible as words
+python tools/qa.py "$PROJ" --gate g1 --tags
+```
+
+Pass:
+
+- no spoken word matches a known tag (`thoughtful`, `excited`, `low`, `grave`,
+  `sad`, `pause`) unless the script genuinely says that word;
+- the first spoken word of a tagged segment starts **<= 0.6 s** after the
+  segment head. A longer lead-in means a diegetic tag inserted a sound effect:
+  allowed only when the shot plan asked for it, and logged;
+- tag-only text is not a test case in the run (it returns HTTP 422 upstream);
+- the tag map in `script.json` matches `PIPELINE.md` (`[serious]` ->
+  `[low, grave]`, `[short pause]` -> `[pause]`).
 
 Spot check with ears: 3 random segments, word boundaries land on the syllable,
 not 200 ms early. A TTS service that reports char offsets as word offsets passes
@@ -175,6 +194,34 @@ past the last word.
 Mux check: `-map 0:v:0 -map 1:a:0` was used, not a silent track from the video
 source. Confirm the audio stream has a real bitrate.
 
+## G6b — audio
+
+```bash
+ffmpeg -v error -i score/mix.wav -af ebur128=peak=true -f null - 2>&1 | tail -12
+python tools/qa.py "$PROJ" --gate audio
+```
+
+Pass:
+
+| check | threshold |
+|---|---|
+| integrated loudness | -16 +-1 LUFS |
+| true peak | <= -1.0 dBTP |
+| loudness range | 6-14 LU |
+| voice-minus-bed margin | >= 6 LU on every spoken window |
+| duck depth | 2.5-3.5 dB between speech and gaps |
+| cue placement | no cue before 0 or after narration; every cue within 1 frame of its word or cut |
+| cue edges | 5 ms fade in/out; no click (sample delta < 0.1 FS at the boundary) |
+| drone | one continuous render; no loop seam |
+| stems | `voice.wav`, `music.wav`, `sfx.wav` all present and sum to `mix.wav` within 0.1 dB |
+
+The margin is measured on the **spoken windows**, not on the file average. A mix
+can be -16 LUFS overall and still bury the voice under a loud battle section.
+
+Diegetic audio tags are checked twice: once here (the event is audible) and once
+in G1 (the tag was not spoken). A tag that is spoken and a tag that is silent are
+both defects.
+
 ## Defect ledger
 
 Every rejection is logged with the shot, the gate, the cause and the fix. The
@@ -191,7 +238,7 @@ regenerations, and the three defects that cost the most.
 
 ## Ship checklist
 
-- [ ] G0-G6 all pass, or the waiver is written down with a reason
+- [ ] G0–G6b all pass, or the waiver is written down with a reason
 - [ ] `README.md` has pipeline, commands, timings, credit spend, compromises
 - [ ] `state/` is complete enough that a re-run costs nothing
 - [ ] the 6 best frames are in `qa/stills/` for the thumbnail choice
